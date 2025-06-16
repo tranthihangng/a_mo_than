@@ -56,7 +56,7 @@ resized_roi_points = (roi_points * scale_percent / 100).astype(int)
 # Vẽ đường viền ROI trên ảnh đã resize
 image_with_roi = resized_image.copy()
 cv2.polylines(image_with_roi, [resized_roi_points], isClosed=True, color=(0, 255, 0), thickness=2)
-
+cv2.imwrite("ROI1.jpg",image_with_roi)
 # Hiển thị ảnh
 cv2.imshow("Image with ROI", image_with_roi)
 cv2.waitKey(0)

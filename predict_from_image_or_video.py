@@ -77,7 +77,7 @@ def main():
 
     # Đổi đường dẫn dưới đây cho phù hợp
     #input_path = "F:\phan_loai\full\hiv00007_000109.jpg"  # Ví dụ: "test.jpg" hoặc "test.mp4"
-    input_path = r"F:\coal_frame\hiv00161(1)\hiv00161_000829.jpg"
+    input_path = r"F:\phan_loai\empty\hiv00016_000847.jpg"
     if input_path.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')):
         predict_image(input_path, model, scaler, le, roi_points)
     elif input_path.lower().endswith(('.mp4', '.avi', '.mov', '.mkv')):
