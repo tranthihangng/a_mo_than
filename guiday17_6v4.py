@@ -26,6 +26,8 @@ class CoalClassificationGUI:
         self.scaler = None
         self.label_encoder = None
         self.running_video = False
+        self.level_var = tk.StringVar(value="0.0")
+        self.bg_status = "close"  # close hoặc open
         
         # Load model
         self.load_models()
@@ -95,14 +97,84 @@ class CoalClassificationGUI:
         self.process_btn.pack(fill='x', padx=10, pady=(0, 10))
         
         # Prediction results
-        result_frame = tk.LabelFrame(left_frame, text="Kết quả dự đoán", font=('Arial', 12, 'bold'),
+        result_frame = tk.LabelFrame(left_frame, text="Prediction Results", font=('Arial', 12, 'bold'),
                                     bg='#f0f0f0', fg='#2c3e50')
-        result_frame.pack(fill='x', expand=False)
+        result_frame.pack(fill='x', expand=False, padx=5)
+
+        # Title with icon
+        title_frame = tk.Frame(result_frame, bg='#f0f0f0')
+        title_frame.pack(fill='x', padx=10, pady=(5,0))
+
+        tk.Label(title_frame, text="🎯 Classification Confidence", 
+                font=('Arial', 11, 'bold'), bg='#f0f0f0', fg='#2c3e50').pack(side='left')
+
+        # Container for result bars
+        self.result_container = tk.Frame(result_frame, bg='#f0f0f0')
+        self.result_container.pack(fill='both', expand=True, padx=10, pady=5)
+
+        # Create styled result bars for each class
+        self.class_bars = {}
+        self.class_labels = {}
+        self.class_values = {}
         
-        self.result_text = tk.Text(result_frame, height=10, width=45, font=('Consolas', 10),
-                                  bg='#e8f4fd', fg='#2c3e50', relief='flat', wrap='none')
-        self.result_text.pack(padx=10, pady=10, fill='both', expand=True)
-        
+        for class_name in ['Empty', 'Low', 'Medium', 'Full']:
+            # Container for each class
+            class_frame = tk.Frame(self.result_container, bg='#f0f0f0')
+            class_frame.pack(fill='x', pady=2)
+            
+            # Label (left)
+            label = tk.Label(class_frame, text=class_name, width=8, anchor='w',
+                           font=('Arial', 10), bg='#f0f0f0', fg='#2c3e50')
+            label.pack(side='left')
+            
+            # Progress bar (center)
+            style_name = f'{class_name.lower()}.Horizontal.TProgressbar'
+            style = ttk.Style()
+            
+            # Custom colors for each class
+            colors = {
+                'Empty': '#e74c3c',    # Red
+                'Low': '#f39c12',      # Orange
+                'Medium': '#3498db',    # Blue
+                'Full': '#2ecc71'      # Green
+            }
+            
+            style.configure(style_name,
+                          troughcolor='#f5f5f5',
+                          background=colors[class_name],
+                          thickness=12,
+                          borderwidth=0)
+            
+            bar = ttk.Progressbar(class_frame, style=style_name,
+                                length=150, mode='determinate',
+                                maximum=100, value=0)
+            bar.pack(side='left', padx=5)
+            
+            # Value label (right)
+            value_label = tk.Label(class_frame, text="0%", width=5,
+                                 font=('Arial', 10), bg='#f0f0f0', fg=colors[class_name])
+            value_label.pack(side='left')
+            
+            # Store references
+            self.class_bars[class_name] = bar
+            self.class_labels[class_name] = label
+            self.class_values[class_name] = value_label
+
+        # Add a separator
+        ttk.Separator(result_frame, orient='horizontal').pack(fill='x', padx=10, pady=5)
+
+        # Final prediction frame
+        final_pred_frame = tk.Frame(result_frame, bg='#f0f0f0')
+        final_pred_frame.pack(fill='x', padx=10, pady=5)
+
+        tk.Label(final_pred_frame, text="Final Prediction:", 
+                font=('Arial', 10, 'bold'), bg='#f0f0f0', fg='#2c3e50').pack(side='left')
+
+        self.final_pred_label = tk.Label(final_pred_frame, text="--",
+                                       font=('Arial', 12, 'bold'), bg='#f0f0f0', fg='#27ae60',
+                                       width=10)
+        self.final_pred_label.pack(side='left', padx=5)
+
         # Thêm frame hiển thị ảnh ngay dưới result_frame
         image_frame = tk.LabelFrame(left_frame, text="Ảnh/Frame và ROI", font=('Arial', 12, 'bold'),
                                     bg='#f0f0f0', fg='#2c3e50')
@@ -155,35 +227,97 @@ class CoalClassificationGUI:
         # Top: WinCC controls
         control_frame = tk.Frame(self.background_tab, bg='#f0f0f0')
         control_frame.pack(fill='x', pady=(0, 10))
-        
-        # Motor controls
-        motor_frame = tk.LabelFrame(control_frame, text="Motor", bg='#eaf6fb', fg='#2c3e50')
-        motor_frame.pack(side='left', padx=10)
-        tk.Label(motor_frame, text="Motor kéo tàu (Hz):").pack()
-        tk.Entry(motor_frame, width=6).pack()
-        tk.Label(motor_frame, text="Motor đóng mở (Hz):").pack()
-        tk.Entry(motor_frame, width=6).pack()
-        tk.Label(motor_frame, text="Chọn mức than (%):").pack()
-        tk.Entry(motor_frame, width=6).pack()
-        
+
+        # Control Panel
+        control_panel = tk.LabelFrame(control_frame, text="Control Panel", font=('Arial', 12, 'bold'),
+                                    bg='#eaf6fb', fg='#2c3e50', padx=15, pady=10)
+        control_panel.pack(fill='x', padx=10)
+
+        # Left side: Motor controls
+        motor_frame = tk.Frame(control_panel, bg='#eaf6fb')
+        motor_frame.pack(side='left', padx=(0, 20))
+
+        # Motor Title with icon
+        motor_title = tk.Label(motor_frame, text="🔄 Motor Control", 
+                             font=('Arial', 11, 'bold'), bg='#eaf6fb', fg='#2c3e50')
+        motor_title.pack(pady=(0, 5))
+
+        # Motor inputs with better layout
+        motor_inputs = [
+            ("Conveyor Motor (Hz)", "conveyor_speed"),
+            ("Gate Motor (Hz)", "gate_speed"),
+            ("Coal Level (%)", "coal_level")
+        ]
+
+        for label_text, name in motor_inputs:
+            input_frame = tk.Frame(motor_frame, bg='#eaf6fb')
+            input_frame.pack(fill='x', pady=2)
+            
+            label = tk.Label(input_frame, text=label_text, width=15, anchor='e',
+                           font=('Arial', 10), bg='#eaf6fb', fg='#2c3e50')
+            label.pack(side='left', padx=(0, 5))
+            
+            entry = tk.Entry(input_frame, width=8, font=('Arial', 10),
+                           justify='center', relief='solid', bd=1)
+            entry.pack(side='left')
+            setattr(self, f"{name}_entry", entry)
+
+        # Center: Mode and System controls
+        mode_sys_frame = tk.Frame(control_panel, bg='#eaf6fb')
+        mode_sys_frame.pack(side='left', padx=20)
+
         # Mode controls
-        mode_frame = tk.LabelFrame(control_frame, text="Chế độ", bg='#eaf6fb', fg='#2c3e50')
-        mode_frame.pack(side='left', padx=10)
-        tk.Button(mode_frame, text="MAN", bg='lime').pack(side='left', padx=5)
-        tk.Button(mode_frame, text="AUTO", bg='violet').pack(side='left', padx=5)
-        
+        mode_title = tk.Label(mode_sys_frame, text="⚙️ Operation Mode", 
+                            font=('Arial', 11, 'bold'), bg='#eaf6fb', fg='#2c3e50')
+        mode_title.pack(pady=(0, 5))
+
+        mode_buttons_frame = tk.Frame(mode_sys_frame, bg='#eaf6fb')
+        mode_buttons_frame.pack()
+
+        self.man_btn = tk.Button(mode_buttons_frame, text="MANUAL", width=8,
+                                font=('Arial', 10, 'bold'), bg='#4CAF50', fg='white',
+                                relief='raised', command=lambda: self.switch_mode('man'))
+        self.man_btn.pack(side='left', padx=5)
+
+        self.auto_btn = tk.Button(mode_buttons_frame, text="AUTO", width=8,
+                                 font=('Arial', 10, 'bold'), bg='#9E9E9E', fg='white',
+                                 relief='raised', command=lambda: self.switch_mode('auto'))
+        self.auto_btn.pack(side='left', padx=5)
+
         # System controls
-        sys_frame = tk.LabelFrame(control_frame, text="Hệ thống", bg='#eaf6fb', fg='#2c3e50')
-        sys_frame.pack(side='left', padx=10)
-        tk.Button(sys_frame, text="START", bg='lime').pack(side='left', padx=5)
-        tk.Button(sys_frame, text="STOP", bg='red').pack(side='left', padx=5)
-        
-        # Mức than
-        level_frame = tk.LabelFrame(control_frame, text="Mức than", bg='#eaf6fb', fg='#2c3e50')
-        level_frame.pack(side='left', padx=10)
-        self.level_var = tk.StringVar(value="0.0")
-        tk.Label(level_frame, textvariable=self.level_var, font=('Arial', 18, 'bold')).pack()
-        
+        sys_title = tk.Label(mode_sys_frame, text="🔌 System Control", 
+                           font=('Arial', 11, 'bold'), bg='#eaf6fb', fg='#2c3e50')
+        sys_title.pack(pady=(15, 5))
+
+        sys_buttons_frame = tk.Frame(mode_sys_frame, bg='#eaf6fb')
+        sys_buttons_frame.pack()
+
+        self.start_btn = tk.Button(sys_buttons_frame, text="START", width=8,
+                                 font=('Arial', 10, 'bold'), bg='#2196F3', fg='white',
+                                 relief='raised', command=self.start_system)
+        self.start_btn.pack(side='left', padx=5)
+
+        self.stop_btn = tk.Button(sys_buttons_frame, text="STOP", width=8,
+                                font=('Arial', 10, 'bold'), bg='#F44336', fg='white',
+                                relief='raised', command=self.stop_system)
+        self.stop_btn.pack(side='left', padx=5)
+
+        # Right side: Coal Level Display
+        level_frame = tk.Frame(control_panel, bg='#eaf6fb')
+        level_frame.pack(side='right', padx=20)
+
+        level_title = tk.Label(level_frame, text="📊 Coal Level", 
+                             font=('Arial', 11, 'bold'), bg='#eaf6fb', fg='#2c3e50')
+        level_title.pack(pady=(0, 5))
+
+        self.level_display = tk.Label(level_frame, textvariable=self.level_var,
+                                    font=('Arial', 24, 'bold'), bg='#eaf6fb', fg='#2c3e50',
+                                    width=6, relief='solid', bd=1)
+        self.level_display.pack()
+
+        tk.Label(level_frame, text="Percent (%)", 
+                font=('Arial', 10), bg='#eaf6fb', fg='#2c3e50').pack(pady=(5, 0))
+
         # Create main display area in background tab
         self.main_display = tk.Canvas(self.background_tab, bg='white')
         self.main_display.pack(fill='both', expand=True, padx=10, pady=10)
@@ -196,7 +330,7 @@ class CoalClassificationGUI:
         
         # Hiển thị ảnh nền lên canvas của tab Background
         try:
-            bg_image = Image.open("bg.png")
+            bg_image = Image.open("close.png")
             # Đợi canvas render xong để lấy kích thước thực tế
             self.root.update_idletasks()
             canvas_width = self.main_display.winfo_width()
@@ -218,7 +352,8 @@ class CoalClassificationGUI:
         
     def draw_bg_image(self, event=None):
         try:
-            bg_image = Image.open("bg.png")
+            bg_file = "close.png" if self.bg_status == "close" else "open.png"
+            bg_image = Image.open(bg_file)
             canvas_width = self.main_display.winfo_width()
             canvas_height = self.main_display.winfo_height()
             if canvas_width < 10 or canvas_height < 10:
@@ -408,10 +543,14 @@ class CoalClassificationGUI:
             
     def display_prediction_results(self, prediction, probabilities):
         """Hiển thị kết quả dự đoán"""
-        result_text = ""
-        
         # Đảm bảo đúng thứ tự: Empty, Low, Medium, Full (Empty là 'rong')
-        desired_order = [('rong', 'Empty'), ('low', 'Low'), ('medium', 'Medium'), ('full', 'Full')]
+        class_mapping = {
+            'rong': 'Empty',
+            'low': 'Low',
+            'medium': 'Medium',
+            'full': 'Full'
+        }
+        
         if self.label_encoder:
             class_names = list(self.label_encoder.classes_)
         else:
@@ -423,33 +562,42 @@ class CoalClassificationGUI:
         # Tính toán fullness_percent dựa trên xác suất của từng mức
         level_map = {'rong': 0, 'low': 33, 'medium': 66, 'full': 100}
         fullness_percent = 0
-        for class_key, _ in desired_order:
-            prob = prob_dict.get(class_key, 0.0)
-            fullness_percent += prob * level_map[class_key]
+        max_prob = 0
+        final_prediction = "Unknown"
 
-        # Cập nhật thanh bar và label
+        for orig_name, display_name in class_mapping.items():
+            prob = prob_dict.get(orig_name, 0.0)
+            percentage = prob * 100
+            
+            # Cập nhật progress bar và label
+            self.class_bars[display_name]['value'] = percentage
+            self.class_values[display_name].config(text=f"{percentage:.1f}%")
+            
+            # Tính toán fullness
+            fullness_percent += prob * level_map[orig_name]
+            
+            # Tìm prediction với probability cao nhất
+            if prob > max_prob:
+                max_prob = prob
+                final_prediction = display_name
+
+        # Cập nhật final prediction
+        self.final_pred_label.config(text=final_prediction)
+
+        # Cập nhật thanh bar và label tổng thể
         self.fullness_var.set(fullness_percent)
         self.fullness_label.config(text=f"{fullness_percent:.1f}%")
-        
-        # Cập nhật giá trị hiển thị ở ô mức than
         self.level_var.set(f"{fullness_percent:.1f}")
 
-        # Thêm header với dấu gạch ngang
-        result_text += "Level    Progress Bar            Value \n"
-        result_text += "-" * 42 + "\n"
+        # Đổi background nếu cần
+        prev_status = self.bg_status
+        if fullness_percent < 5:
+            self.bg_status = "close"
+        else:
+            self.bg_status = "open"
+        if self.bg_status != prev_status:
+            self.draw_bg_image()
 
-        # Hiển thị theo thứ tự mong muốn và đổi tên 'rong' thành 'Empty'
-        for class_key, display_name in desired_order:
-            prob = prob_dict.get(class_key, 0.0)
-            bar_length = int(prob * 20)
-            bar = '█' * bar_length + '░' * (20 - bar_length)
-            # Sử dụng độ rộng cố định cho mỗi phần với font monospace
-            result_text += f"{display_name:<8}|{bar}| {prob*100:>6.1f}%\n"
-        
-        # Cập nhật kết quả vào text widget
-        self.result_text.delete(1.0, tk.END)
-        self.result_text.insert(1.0, result_text)
-        
     def create_visualizations(self, image, gray_image, mask):
         """Tạo các visualization"""
         try:
@@ -545,6 +693,37 @@ class CoalClassificationGUI:
         y = (canvas_h - new_h) // 2
         canvas.create_image(x, y, anchor='nw', image=photo)
         canvas.image = photo  # giữ tham chiếu
+
+    def switch_mode(self, mode):
+        """Chuyển đổi giữa chế độ MAN và AUTO"""
+        if mode == 'man':
+            self.man_btn.config(bg='#4CAF50')  # Active color
+            self.auto_btn.config(bg='#9E9E9E')  # Inactive color
+            # Enable manual controls
+            self.conveyor_speed_entry.config(state='normal')
+            self.gate_speed_entry.config(state='normal')
+            self.coal_level_entry.config(state='normal')
+        else:
+            self.auto_btn.config(bg='#4CAF50')  # Active color
+            self.man_btn.config(bg='#9E9E9E')  # Inactive color
+            # Disable manual controls in auto mode
+            self.conveyor_speed_entry.config(state='disabled')
+            self.gate_speed_entry.config(state='disabled')
+            self.coal_level_entry.config(state='disabled')
+
+    def start_system(self):
+        """Bắt đầu hệ thống"""
+        self.start_btn.config(state='disabled', bg='#9E9E9E')
+        self.stop_btn.config(state='normal', bg='#F44336')
+        # Thêm code xử lý start system ở đây
+        messagebox.showinfo("System Status", "System started successfully!")
+
+    def stop_system(self):
+        """Dừng hệ thống"""
+        self.stop_btn.config(state='disabled', bg='#9E9E9E')
+        self.start_btn.config(state='normal', bg='#2196F3')
+        # Thêm code xử lý stop system ở đây
+        messagebox.showinfo("System Status", "System stopped successfully!")
 
 if __name__ == "__main__":
     root = tk.Tk()
